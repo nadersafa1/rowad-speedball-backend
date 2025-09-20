@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike } from "drizzle-orm";
+import { and, count, desc, eq, ilike } from "drizzle-orm";
 import type { Request, Response } from "express";
 import z from "zod";
 import { db } from "../db/connection";
@@ -10,6 +10,7 @@ import {
   playersQuerySchema,
   playersUpdateSchema,
 } from "../types/players.schemas";
+import { createPaginatedResponse } from "../types/pagination";
 
 // Public Interface
 export const playersController = {
@@ -21,11 +22,13 @@ export const playersController = {
     }
 
     try {
-      const { q, gender, ageGroup, preferredHand } = parseResult.data;
+      const { q, gender, ageGroup, preferredHand, page, limit } =
+        parseResult.data;
 
-      let query = db.select().from(schema.players);
+      // Calculate pagination parameters
+      const offset = (page - 1) * limit;
 
-      // Apply filters
+      // Build base query conditions
       const conditions: any[] = [];
 
       if (q) {
@@ -40,25 +43,47 @@ export const playersController = {
         conditions.push(eq(schema.players.preferredHand, preferredHand));
       }
 
-      // Apply conditions if any exist
-      if (conditions.length > 0) {
-        const combinedCondition = conditions.reduce((acc, condition) =>
-          acc ? and(acc, condition) : condition
-        );
-        query = query.where(combinedCondition) as any;
+      // Create combined condition for reuse
+      const combinedCondition =
+        conditions.length > 0
+          ? conditions.reduce((acc, condition) =>
+              acc ? and(acc, condition) : condition
+            )
+          : undefined;
+
+      // Get total count for pagination
+      let countQuery = db.select({ count: count() }).from(schema.players);
+      if (combinedCondition) {
+        countQuery = countQuery.where(combinedCondition) as any;
       }
 
-      const result = await query
-        .orderBy(desc(schema.players.createdAt))
-        .limit(50);
+      // Get paginated data
+      let dataQuery = db.select().from(schema.players);
+      if (combinedCondition) {
+        dataQuery = dataQuery.where(combinedCondition) as any;
+      }
 
-      const playersWithAge = result.map((player) => ({
+      // Execute both queries in parallel
+      const [countResult, dataResult] = await Promise.all([
+        countQuery,
+        dataQuery
+          .orderBy(desc(schema.players.createdAt))
+          .limit(limit)
+          .offset(offset),
+      ]);
+
+      const totalItems = countResult[0].count;
+
+      // Add calculated fields to players
+      const playersWithAge = dataResult.map((player) => ({
         ...player,
         age: playersService.calculateAge(player.dateOfBirth),
         ageGroup: playersService.getAgeGroup(player.dateOfBirth),
       }));
 
       // Filter by age group after calculation if specified
+      // Note: This filtering happens after pagination, which might not be ideal
+      // Consider moving age group filtering to the database level for better performance
       let filteredPlayers = playersWithAge;
       if (ageGroup) {
         filteredPlayers = playersWithAge.filter(
@@ -66,7 +91,15 @@ export const playersController = {
         );
       }
 
-      res.status(200).json(filteredPlayers);
+      // Create paginated response
+      const paginatedResponse = createPaginatedResponse(
+        filteredPlayers,
+        page,
+        limit,
+        totalItems
+      );
+
+      res.status(200).json(paginatedResponse);
     } catch (error) {
       console.error("Error fetching players:", error);
       res.status(500).json({ message: "Internal server error" });
