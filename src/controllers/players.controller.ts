@@ -4,30 +4,12 @@ import { db } from "../db/connection";
 import { like, eq, and, desc } from "drizzle-orm";
 import { players } from "../db/schema";
 import { playersService } from "../services/players.service";
-
-// Implementation Details
-const playersSchema = z.object({
-  q: z.string().trim().max(20, "q must be less than 20 characters").optional(),
-  gender: z.enum(["male", "female"]).optional(),
-  ageGroup: z
-    .enum([
-      "mini",
-      "U-09",
-      "U-11",
-      "U-13",
-      "U-15",
-      "U-17",
-      "U-19",
-      "U-21",
-      "Seniors",
-    ])
-    .optional(),
-});
+import { playersQuerySchema } from "../types/players.schemas";
 
 // Public Interface
 export const playersController = {
   findAll: async (req: Request, res: Response) => {
-    const parseResult = playersSchema.safeParse(req.query);
+    const parseResult = playersQuerySchema.safeParse(req.query);
 
     if (!parseResult.success) {
       return res.status(400).json(z.treeifyError(parseResult.error));

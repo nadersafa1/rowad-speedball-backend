@@ -1,8 +1,8 @@
 import express from "express";
 import { playersController } from "../../controllers/players.controller";
 
-const chatRouter = express.Router();
+const playersRouter = express.Router();
 
-chatRouter.get("/players", playersController.findAll);
+playersRouter.get("/players", playersController.findAll);
 
-export default chatRouter;
+export default playersRouter;
