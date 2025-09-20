@@ -15,6 +15,7 @@ import {
   calculateTotalScore,
 } from "./db/schema";
 import { eq, desc, and, like, gte, lte, sql } from "drizzle-orm";
+import router from "./routes";
 
 // Load environment variables
 dotenv.config();
@@ -61,6 +62,8 @@ const limiter = rateLimit({
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 });
 app.use("/api/", limiter);
+
+app.use(router);
 
 // Session configuration
 app.use(
