@@ -1,24 +1,45 @@
-# Use the official Node.js image as the base image
-FROM node:22-alpine
+# syntax=docker/dockerfile:1
 
-# Set the working directory inside the container
+# Use Bun's official Alpine image
+ARG BUN_VERSION=1.2.19-alpine
+FROM oven/bun:${BUN_VERSION} AS base
+
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Create app directory and non-root user
 WORKDIR /app
+RUN addgroup -g 1001 -S bunjs && \
+    adduser -S speedball -u 1001
 
-# Copy package.json and package-lock.json (or yarn.lock) to the container
-COPY package*.json ./
-COPY apps/backend/package*.json ./apps/backend/
-# Install dependencies
-RUN npm install
+# Copy package files for dependency installation
+COPY package*.json bun.lockb* ./
 
-# Copy the rest of your application code to the container
-COPY apps/backend ./apps/backend
+# Install dependencies (including devDependencies for build)
+RUN bun install --frozen-lockfile
+
+# Copy source code
+COPY . .
 
 # Build the TypeScript application
-WORKDIR /app/apps/backend
-RUN npm run build
+RUN bun run build
+
+# Remove devDependencies for production (Bun handles this efficiently)
+RUN bun install --frozen-lockfile --production
+
+# Change ownership of the app directory to the speedball user
+RUN chown -R speedball:bunjs /app
+USER speedball
 
 # Expose the port your app runs on
-EXPOSE 5555
+EXPOSE 2000
 
-# Command to start your application
-CMD ["/app/start.sh"]
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD bun -e "require('http').get('http://localhost:2000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
+
+# Use the start script which includes database migration
+CMD ["bun", "run", "start"]
