@@ -1,9 +1,9 @@
+import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import session from "express-session";
 import rateLimit from "express-rate-limit";
-import { config } from "dotenv";
 import bcrypt from "bcryptjs";
 import { db } from "./db/connection";
 import {
@@ -17,7 +17,7 @@ import {
 import { eq, desc, and, like, gte, lte, sql } from "drizzle-orm";
 
 // Load environment variables
-config();
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5555;
