@@ -1,16 +1,15 @@
+import { and, desc, eq, ilike } from "drizzle-orm";
 import type { Request, Response } from "express";
 import z from "zod";
 import { db } from "../db/connection";
-import { like, eq, and, desc } from "drizzle-orm";
-import { players } from "../db/schema";
+import * as schema from "../db/schema";
 import { playersService } from "../services/players.service";
 import {
-  playersQuerySchema,
-  playersParamsSchema,
   playersCreateSchema,
+  playersParamsSchema,
+  playersQuerySchema,
   playersUpdateSchema,
 } from "../types/players.schemas";
-import { testResults, tests } from "../db/schema";
 
 // Public Interface
 export const playersController = {
@@ -22,19 +21,23 @@ export const playersController = {
     }
 
     try {
-      const { q, gender, ageGroup } = req.query;
+      const { q, gender, ageGroup, preferredHand } = parseResult.data;
 
-      let query = db.select().from(players);
+      let query = db.select().from(schema.players);
 
       // Apply filters
       const conditions: any[] = [];
 
       if (q) {
-        conditions.push(like(players.name, `%${q}%`));
+        conditions.push(ilike(schema.players.name, `%${q}%`));
       }
 
-      if (gender && (gender === "male" || gender === "female")) {
-        conditions.push(eq(players.gender, gender));
+      if (gender) {
+        conditions.push(eq(schema.players.gender, gender));
+      }
+
+      if (preferredHand) {
+        conditions.push(eq(schema.players.preferredHand, preferredHand));
       }
 
       // Apply conditions if any exist
@@ -45,7 +48,9 @@ export const playersController = {
         query = query.where(combinedCondition) as any;
       }
 
-      const result = await query.orderBy(desc(players.createdAt)).limit(50);
+      const result = await query
+        .orderBy(desc(schema.players.createdAt))
+        .limit(50);
 
       const playersWithAge = result.map((player) => ({
         ...player,
@@ -80,8 +85,8 @@ export const playersController = {
 
       const player = await db
         .select()
-        .from(players)
-        .where(eq(players.id, id))
+        .from(schema.players)
+        .where(eq(schema.players.id, id))
         .limit(1);
 
       if (player.length === 0) {
@@ -90,13 +95,13 @@ export const playersController = {
 
       const playerResults = await db
         .select({
-          result: testResults,
-          test: tests,
+          result: schema.testResults,
+          test: schema.tests,
         })
-        .from(testResults)
-        .leftJoin(tests, eq(testResults.testId, tests.id))
-        .where(eq(testResults.playerId, id))
-        .orderBy(desc(testResults.createdAt));
+        .from(schema.testResults)
+        .leftJoin(schema.tests, eq(schema.testResults.testId, schema.tests.id))
+        .where(eq(schema.testResults.playerId, id))
+        .orderBy(desc(schema.testResults.createdAt));
 
       const resultsWithTotal = playerResults.map((row) => ({
         ...row.result,
@@ -126,14 +131,15 @@ export const playersController = {
     }
 
     try {
-      const { name, dateOfBirth, gender } = parseResult.data;
+      const { name, dateOfBirth, gender, preferredHand } = parseResult.data;
 
       const result = await db
-        .insert(players)
+        .insert(schema.players)
         .values({
           name,
           dateOfBirth,
           gender,
+          preferredHand,
         })
         .returning();
 
@@ -169,8 +175,8 @@ export const playersController = {
       // Check if player exists
       const existingPlayer = await db
         .select()
-        .from(players)
-        .where(eq(players.id, id))
+        .from(schema.players)
+        .where(eq(schema.players.id, id))
         .limit(1);
 
       if (existingPlayer.length === 0) {
@@ -178,9 +184,9 @@ export const playersController = {
       }
 
       const result = await db
-        .update(players)
+        .update(schema.players)
         .set(updateData)
-        .where(eq(players.id, id))
+        .where(eq(schema.players.id, id))
         .returning();
 
       const updatedPlayer = {
@@ -209,15 +215,15 @@ export const playersController = {
       // Check if player exists
       const existingPlayer = await db
         .select()
-        .from(players)
-        .where(eq(players.id, id))
+        .from(schema.players)
+        .where(eq(schema.players.id, id))
         .limit(1);
 
       if (existingPlayer.length === 0) {
         return res.status(404).json({ message: "Player not found" });
       }
 
-      await db.delete(players).where(eq(players.id, id));
+      await db.delete(schema.players).where(eq(schema.players.id, id));
 
       res.status(204).send();
     } catch (error) {

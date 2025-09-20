@@ -1,4 +1,5 @@
-import { calculateAge, getAgeGroup, calculateTotalScore } from "../db/schema";
+import { calculateTotalScore } from "../db/schema/results";
+import { calculateAge, getAgeGroup } from "../db/schema/players";
 
 // Public Interface
 export const playersService = {

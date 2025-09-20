@@ -6,15 +6,10 @@ import session from "express-session";
 import rateLimit from "express-rate-limit";
 import bcrypt from "bcryptjs";
 import { db } from "./db/connection";
-import {
-  players,
-  tests,
-  testResults,
-  calculateAge,
-  getAgeGroup,
-  calculateTotalScore,
-} from "./db/schema";
-import { eq, desc, and, like, gte, lte, sql } from "drizzle-orm";
+import * as schema from "./db/schema";
+import { calculateTotalScore } from "./db/schema/results";
+import { calculateAge, getAgeGroup } from "./db/schema/players";
+import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 import router from "./routes";
 
 // Load environment variables
@@ -63,8 +58,6 @@ const limiter = rateLimit({
 });
 app.use("/api/", limiter);
 
-app.use(router);
-
 // Session configuration
 app.use(
   session({
@@ -82,6 +75,8 @@ app.use(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use(router);
 
 // Health check endpoint - simple version that doesn't require DB
 app.get("/health", (req, res) => {
@@ -181,122 +176,22 @@ app.get("/api/auth/verify", (req, res) => {
   }
 });
 
-// Players routes
-app.get("/api/players", async (req, res) => {
-  try {
-    const { search, gender, ageGroup } = req.query;
-
-    let query = db.select().from(players);
-
-    // Apply filters
-    const conditions: any[] = [];
-
-    if (search) {
-      conditions.push(like(players.name, `%${search}%`));
-    }
-
-    if (gender && (gender === "male" || gender === "female")) {
-      conditions.push(eq(players.gender, gender));
-    }
-
-    // Apply conditions if any exist
-    if (conditions.length > 0) {
-      const combinedCondition = conditions.reduce((acc, condition) =>
-        acc ? and(acc, condition) : condition
-      );
-      query = query.where(combinedCondition) as any;
-    }
-
-    const result = await query.orderBy(desc(players.createdAt)).limit(50);
-
-    const playersWithAge = result.map((player) => ({
-      ...player,
-      age: calculateAge(player.dateOfBirth),
-      ageGroup: getAgeGroup(player.dateOfBirth),
-    }));
-
-    // Filter by age group after calculation if specified
-    let filteredPlayers = playersWithAge;
-    if (ageGroup) {
-      filteredPlayers = playersWithAge.filter(
-        (player) => player.ageGroup === ageGroup
-      );
-    }
-
-    res.status(200).json(filteredPlayers);
-  } catch (error) {
-    console.error("Error fetching players:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-});
-
-app.get("/api/players/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const player = await db
-      .select()
-      .from(players)
-      .where(eq(players.id, id))
-      .limit(1);
-
-    if (player.length === 0) {
-      return res.status(404).json({ message: "Player not found" });
-    }
-
-    const playerResults = await db
-      .select({
-        result: testResults,
-        test: tests,
-      })
-      .from(testResults)
-      .leftJoin(tests, eq(testResults.testId, tests.id))
-      .where(eq(testResults.playerId, id))
-      .orderBy(desc(testResults.createdAt));
-
-    const resultsWithTotal = playerResults.map((row) => ({
-      ...row.result,
-      totalScore: calculateTotalScore(row.result),
-      test: row.test,
-    }));
-
-    const playerWithAge = {
-      ...player[0],
-      age: calculateAge(player[0].dateOfBirth),
-      ageGroup: getAgeGroup(player[0].dateOfBirth),
-      testResults: resultsWithTotal,
-    };
-
-    res.status(200).json(playerWithAge);
-  } catch (error) {
-    console.error("Error fetching player:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-});
-
 // Tests routes
 app.get("/api/tests", async (req, res) => {
   try {
     const { testType, dateFrom, dateTo } = req.query;
 
-    let query = db.select().from(tests);
+    let query = db.select().from(schema.tests);
 
     // Apply filters
     const conditions: any[] = [];
 
-    if (
-      testType &&
-      (testType === "60_30" || testType === "30_30" || testType === "30_60")
-    ) {
-      conditions.push(eq(tests.testType, testType));
-    }
-
     if (dateFrom) {
-      conditions.push(gte(tests.dateConducted, dateFrom as string));
+      conditions.push(gte(schema.tests.dateConducted, dateFrom as string));
     }
 
     if (dateTo) {
-      conditions.push(lte(tests.dateConducted, dateTo as string));
+      conditions.push(lte(schema.tests.dateConducted, dateTo as string));
     }
 
     // Apply conditions if any exist
@@ -307,7 +202,9 @@ app.get("/api/tests", async (req, res) => {
       query = query.where(combinedCondition) as any;
     }
 
-    const result = await query.orderBy(desc(tests.dateConducted)).limit(50);
+    const result = await query
+      .orderBy(desc(schema.tests.dateConducted))
+      .limit(50);
 
     res.status(200).json(result);
   } catch (error) {
@@ -321,7 +218,11 @@ app.get("/api/tests/:id", async (req, res) => {
     const { id } = req.params;
     const { includeResults } = req.query;
 
-    const test = await db.select().from(tests).where(eq(tests.id, id)).limit(1);
+    const test = await db
+      .select()
+      .from(schema.tests)
+      .where(eq(schema.tests.id, id))
+      .limit(1);
 
     if (test.length === 0) {
       return res.status(404).json({ message: "Test not found" });
@@ -330,13 +231,16 @@ app.get("/api/tests/:id", async (req, res) => {
     if (includeResults === "true") {
       const testResultsWithPlayers = await db
         .select({
-          result: testResults,
-          player: players,
+          result: schema.testResults,
+          player: schema.players,
         })
-        .from(testResults)
-        .leftJoin(players, eq(testResults.playerId, players.id))
-        .where(eq(testResults.testId, id))
-        .orderBy(desc(testResults.createdAt));
+        .from(schema.testResults)
+        .leftJoin(
+          schema.players,
+          eq(schema.testResults.playerId, schema.players.id)
+        )
+        .where(eq(schema.testResults.testId, id))
+        .orderBy(desc(schema.testResults.createdAt));
 
       const resultsWithAge = testResultsWithPlayers.map((row) => ({
         ...row.result,
@@ -368,7 +272,7 @@ app.get("/api/tests/:id", async (req, res) => {
 // Test Results routes
 app.get("/api/results", async (req, res) => {
   try {
-    const result = await db.select().from(testResults).limit(50);
+    const result = await db.select().from(schema.testResults).limit(50);
 
     const resultsWithTotal = result.map((result) => ({
       ...result,
@@ -382,110 +286,25 @@ app.get("/api/results", async (req, res) => {
   }
 });
 
-// Admin-only players routes
-app.post("/api/players", requireAuth, async (req, res) => {
-  try {
-    const { name, dateOfBirth, gender } = req.body;
-
-    if (!name || !dateOfBirth || !gender) {
-      return res
-        .status(400)
-        .json({ message: "Name, date of birth, and gender are required" });
-    }
-
-    const result = await db
-      .insert(players)
-      .values({
-        name,
-        dateOfBirth,
-        gender,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
-
-    const playerWithAge = {
-      ...result[0],
-      age: calculateAge(result[0].dateOfBirth),
-      ageGroup: getAgeGroup(result[0].dateOfBirth),
-    };
-
-    res.status(201).json(playerWithAge);
-  } catch (error) {
-    console.error("Error creating player:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-});
-
-app.put("/api/players/:id", requireAuth, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, dateOfBirth, gender } = req.body;
-
-    const updateData: any = { updatedAt: new Date() };
-    if (name) updateData.name = name;
-    if (dateOfBirth) updateData.dateOfBirth = dateOfBirth;
-    if (gender) updateData.gender = gender;
-
-    const result = await db
-      .update(players)
-      .set(updateData)
-      .where(eq(players.id, id))
-      .returning();
-
-    if (result.length === 0) {
-      return res.status(404).json({ message: "Player not found" });
-    }
-
-    const playerWithAge = {
-      ...result[0],
-      age: calculateAge(result[0].dateOfBirth),
-      ageGroup: getAgeGroup(result[0].dateOfBirth),
-    };
-
-    res.status(200).json(playerWithAge);
-  } catch (error) {
-    console.error("Error updating player:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-});
-
-app.delete("/api/players/:id", requireAuth, async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const result = await db
-      .delete(players)
-      .where(eq(players.id, id))
-      .returning();
-
-    if (result.length === 0) {
-      return res.status(404).json({ message: "Player not found" });
-    }
-
-    res.status(200).json({ message: "Player deleted successfully" });
-  } catch (error) {
-    console.error("Error deleting player:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-});
-
 // Admin-only tests routes
 app.post("/api/tests", requireAuth, async (req, res) => {
   try {
-    const { name, testType, dateConducted, description } = req.body;
+    const { name, playingTime, recoveryTime, dateConducted, description } =
+      req.body;
 
-    if (!name || !testType || !dateConducted) {
-      return res
-        .status(400)
-        .json({ message: "Name, test type, and date conducted are required" });
+    if (!name || !playingTime || !recoveryTime || !dateConducted) {
+      return res.status(400).json({
+        message:
+          "Name, playing time, recovery time, and date conducted are required",
+      });
     }
 
     const result = await db
-      .insert(tests)
+      .insert(schema.tests)
       .values({
         name,
-        testType,
+        playingTime,
+        recoveryTime,
         dateConducted,
         description: description || null,
         createdAt: new Date(),
@@ -503,18 +322,20 @@ app.post("/api/tests", requireAuth, async (req, res) => {
 app.put("/api/tests/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, testType, dateConducted, description } = req.body;
+    const { name, playingTime, recoveryTime, dateConducted, description } =
+      req.body;
 
     const updateData: any = { updatedAt: new Date() };
     if (name) updateData.name = name;
-    if (testType) updateData.testType = testType;
+    if (playingTime) updateData.playingTime = playingTime;
+    if (recoveryTime) updateData.recoveryTime = recoveryTime;
     if (dateConducted) updateData.dateConducted = dateConducted;
     if (description !== undefined) updateData.description = description;
 
     const result = await db
-      .update(tests)
+      .update(schema.tests)
       .set(updateData)
-      .where(eq(tests.id, id))
+      .where(eq(schema.tests.id, id))
       .returning();
 
     if (result.length === 0) {
@@ -532,7 +353,10 @@ app.delete("/api/tests/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const result = await db.delete(tests).where(eq(tests.id, id)).returning();
+    const result = await db
+      .delete(schema.tests)
+      .where(eq(schema.tests.id, id))
+      .returning();
 
     if (result.length === 0) {
       return res.status(404).json({ message: "Test not found" });
@@ -571,7 +395,7 @@ app.post("/api/results", requireAuth, async (req, res) => {
     }
 
     const result = await db
-      .insert(testResults)
+      .insert(schema.testResults)
       .values({
         playerId,
         testId,
@@ -618,9 +442,9 @@ app.put("/api/results/:id", requireAuth, async (req, res) => {
     if (backhandScore !== undefined) updateData.backhandScore = backhandScore;
 
     const result = await db
-      .update(testResults)
+      .update(schema.testResults)
       .set(updateData)
-      .where(eq(testResults.id, id))
+      .where(eq(schema.testResults.id, id))
       .returning();
 
     if (result.length === 0) {
@@ -644,8 +468,8 @@ app.delete("/api/results/:id", requireAuth, async (req, res) => {
     const { id } = req.params;
 
     const result = await db
-      .delete(testResults)
-      .where(eq(testResults.id, id))
+      .delete(schema.testResults)
+      .where(eq(schema.testResults.id, id))
       .returning();
 
     if (result.length === 0) {

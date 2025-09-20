@@ -19,7 +19,6 @@
     "dotenv": "^16.6.1",
     "drizzle-kit": "^0.31.4",
     "drizzle-orm": "^0.44.5",
-    "drizzle-zod": "^0.8.3",
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
     "express-session": "^1.18.2",
