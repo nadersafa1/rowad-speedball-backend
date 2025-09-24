@@ -32,13 +32,28 @@ app.use(
   cors({
     origin:
       process.env.NODE_ENV === "production"
-        ? ["https://rowad.speedballhub.com", "http://rowad.speedballhub.com"]
+        ? [
+            "https://rowad.speedballhub.com",
+            "http://rowad.speedballhub.com",
+            // Allow local development to access production API
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+          ]
         : [
             "http://localhost:3000",
             "http://localhost:3001",
             "http://127.0.0.1:3000",
           ],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+    ],
   })
 );
 

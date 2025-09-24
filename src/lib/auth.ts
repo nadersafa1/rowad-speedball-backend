@@ -15,7 +15,14 @@ export const auth = betterAuth({
       : "http://localhost:2000",
   trustedOrigins:
     process.env.NODE_ENV === "production"
-      ? ["https://rowad.speedballhub.com", "http://rowad.speedballhub.com"]
+      ? [
+          "https://rowad.speedballhub.com",
+          "http://rowad.speedballhub.com",
+          // Allow local development to access production API
+          "http://localhost:3000",
+          "http://localhost:3001",
+          "http://127.0.0.1:3000",
+        ]
       : [
           "http://localhost:3000",
           "http://localhost:3001",
