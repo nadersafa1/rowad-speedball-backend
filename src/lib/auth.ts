@@ -9,6 +9,18 @@ export const auth = betterAuth({
     provider: "pg", // PostgreSQL
     schema: schema,
   }),
+  baseURL:
+    process.env.NODE_ENV === "production"
+      ? "https://rowad.speedballhub.com"
+      : "http://localhost:2000",
+  trustedOrigins:
+    process.env.NODE_ENV === "production"
+      ? ["https://rowad.speedballhub.com", "http://rowad.speedballhub.com"]
+      : [
+          "http://localhost:3000",
+          "http://localhost:3001",
+          "http://127.0.0.1:3000",
+        ],
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // Set to true if you want to require email verification
