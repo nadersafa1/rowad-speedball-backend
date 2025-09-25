@@ -36,7 +36,7 @@ export const requireAuth = async (
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     const webRequest = new Request(url, {
-      method: "GET",
+      method: req.method,
       headers: new Headers(req.headers as Record<string, string>),
     });
 
@@ -77,7 +77,7 @@ export const optionalAuth = async (
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     const webRequest = new Request(url, {
-      method: "GET",
+      method: req.method,
       headers: new Headers(req.headers as Record<string, string>),
     });
 
