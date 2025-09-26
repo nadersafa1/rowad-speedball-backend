@@ -8,7 +8,7 @@ export const playersQuerySchema = z
       .trim()
       .max(20, "q must be less than 20 characters")
       .optional(),
-    gender: z.enum(["male", "female"]).optional(),
+    gender: z.enum(["male", "female", "all"]).optional(),
     ageGroup: z
       .enum([
         "mini",
@@ -20,6 +20,7 @@ export const playersQuerySchema = z
         "U-19",
         "U-21",
         "Seniors",
+        "all",
       ])
       .optional(),
     preferredHand: z.enum(["left", "right", "both"]).optional(),

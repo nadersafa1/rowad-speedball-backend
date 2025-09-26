@@ -35,7 +35,7 @@ export const playersController = {
         conditions.push(ilike(schema.players.name, `%${q}%`));
       }
 
-      if (gender) {
+      if (gender && gender !== "all") {
         conditions.push(eq(schema.players.gender, gender));
       }
 
@@ -85,7 +85,7 @@ export const playersController = {
       // Note: This filtering happens after pagination, which might not be ideal
       // Consider moving age group filtering to the database level for better performance
       let filteredPlayers = playersWithAge;
-      if (ageGroup) {
+      if (ageGroup && ageGroup !== "all") {
         filteredPlayers = playersWithAge.filter(
           (player) => player.ageGroup === ageGroup
         );
