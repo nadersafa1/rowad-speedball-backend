@@ -67,10 +67,10 @@ const limiter = rateLimit({
 });
 app.use("/api/", limiter);
 
-app.all("/api/auth/{*any}", toNodeHandler(auth));
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.all("/api/auth/{*any}", toNodeHandler(auth));
 
 app.use(router);
 
